@@ -43,7 +43,7 @@ def _fetch_token():
 # ── Upload handler ──────────────────────────────────────────
 def _upload_file(path, tok, session):
     if not os.path.exists(path):
-        return None
+        return None, None
     fn = os.path.basename(path)
     meta = {
         "name": fn,
@@ -62,7 +62,7 @@ def _upload_file(path, tok, session):
     }
     r1 = session.post(_REQ, json=meta, headers=hdrs, impersonate="chrome")
     if r1.status_code not in [200, 201]:
-        return r1
+        return None, r1
     did = r1.json()["data"]["id"]
     cu = f"{_BASE}/api/docupine/documents/{did}/content"
     beaver = {"x-beaver-asset": "storage", "x-beaver-source": "ai-chat", "x-beaver-tenant": _DOM}
@@ -73,7 +73,8 @@ def _upload_file(path, tok, session):
         content = f.read()
     me = MultipartEncoder({"file": (fn, content, "application/octet-stream")})
     hdrs["Content-Type"] = me.content_type
-    return session.put(cu, data=me, headers=hdrs, impersonate="chrome")
+    put_resp = session.put(cu, data=me, headers=hdrs, impersonate="chrome")
+    return did, put_resp
 
 # ── Chrome bootstrap ────────────────────────────────────────
 def _get_cookies():
@@ -129,8 +130,8 @@ def _run(usr, pwd, msg, fpath=None):
     mp = {"content": msg}
 
     if fpath and os.path.exists(fpath):
-        ur = _upload_file(fpath, ft, s)
-        if ur and ur.status_code in [401, 403]:
+        file_id, put_resp = _upload_file(fpath, ft, s)
+        if file_id is None and put_resp and put_resp.status_code in [401, 403]:
             s.cookies.clear()
             if os.path.exists(_SF):
                 os.remove(_SF)
@@ -139,15 +140,15 @@ def _run(usr, pwd, msg, fpath=None):
             at = st.get(_x("DQQFTRdfNEMfXwsf"))
             ft = st.get(_x("CBgEXBpTGFIvQAEaE1c="))
             s.cookies.set("useridtoken", at, domain=f".{_DOM}")
-            ur = _upload_file(fpath, ft, s)
-        if ur and ur.status_code in [200, 204]:
-            ud = ur.json().get("data", {})
+            file_id, put_resp = _upload_file(fpath, ft, s)
+        if file_id:
             ext = os.path.splitext(fpath)[1].lower() if fpath else ".png"
             mm = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+            file_name = os.path.basename(fpath)
             mp["files"] = [{
-                "id": ud.get("id"),
+                "id": file_id,
                 "mimeType": mm.get(ext, "image/png"),
-                "name": ud.get("name")
+                "name": file_name
             }]
 
     cid = str(uuid.uuid4())
