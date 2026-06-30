@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: vision-gateway-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DISPLAY
+        value: ":99"
